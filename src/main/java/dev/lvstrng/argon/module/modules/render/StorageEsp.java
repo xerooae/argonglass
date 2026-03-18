@@ -11,12 +11,8 @@ import dev.lvstrng.argon.utils.RenderUtils;
 import dev.lvstrng.argon.utils.WorldUtils;
 import net.minecraft.block.entity.*;
 import net.minecraft.client.render.Camera;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.s2c.play.ChunkDeltaUpdateS2CPacket;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.chunk.WorldChunk;
@@ -78,26 +74,38 @@ public final class StorageEsp extends Module implements GameRenderListener, Pack
 
 	private void renderStorages(GameRenderEvent event) {
 		Camera cam = mc.gameRenderer.getCamera();
-		if (cam != null) {
-			MatrixStack matrices = event.matrices;
-			matrices.push();
-			Vec3d vec = cam.getCameraPos();
-			matrices.translate(-vec.x, -vec.y, -vec.z);
+		if (cam == null) {
+			return;
 		}
+
+		event.matrices.push();
+		Vec3d cameraPos = cam.getCameraPos();
+		event.matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(cam.getPitch()));
+		event.matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(cam.getYaw() + 180.0F));
+		event.matrices.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z);
 
 		for (WorldChunk chunk : WorldUtils.getLoadedChunks().toList()) {
 			for (BlockPos blockPos : chunk.getBlockEntityPositions()) {
 				BlockEntity blockEntity = mc.world.getBlockEntity(blockPos);
+				if (blockEntity == null) {
+					continue;
+				}
 
 				RenderUtils.renderFilledBox(event.matrices, blockPos.getX() + 0.1F, blockPos.getY() + 0.05F, blockPos.getZ() + 0.1F, blockPos.getX() + 0.9F, blockPos.getY() + 0.85F, blockPos.getZ() + 0.9F, getColor(blockEntity, alpha.getValueInt()));
 
-				if (tracers.getValue())
-					RenderUtils.renderLine(event.matrices, getColor(blockEntity, 255), mc.crosshairTarget.getPos(), new Vec3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5));
+				Vec3d center = new Vec3d(blockPos.getX() + 0.5, blockPos.getY() + 0.5, blockPos.getZ() + 0.5);
+				if (tracers.getValue() && mc.crosshairTarget != null) {
+					RenderUtils.renderLine(
+							event.matrices,
+							getColor(blockEntity, 255),
+							mc.crosshairTarget.getPos(),
+							center
+					);
+				}
 			}
 		}
 
-		MatrixStack matrixStack = event.matrices;
-		matrixStack.pop();
+		event.matrices.pop();
 	}
 
 	@Override

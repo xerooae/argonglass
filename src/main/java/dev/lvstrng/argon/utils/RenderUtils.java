@@ -1,5 +1,4 @@
 package dev.lvstrng.argon.utils;
-
 import dev.lvstrng.argon.module.modules.client.ClickGUI;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -12,6 +11,7 @@ import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.util.BufferAllocator;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
@@ -401,6 +401,7 @@ public final class RenderUtils {
 		float alpha = color.getAlpha() / 255F;
 		Matrix4f matrix = matrices.peek().getPositionMatrix();
 
+		GL11.glDepthFunc(GL11.GL_ALWAYS);
 		drawLayer(RenderLayers.debugFilledBox(), buffer -> {
 			addQuad(buffer, matrix, f, f2, f3, f4, f2, f3, f4, f2, f6, f, f2, f6, red, green, blue, alpha);
 			addQuad(buffer, matrix, f, f5, f3, f, f5, f6, f4, f5, f6, f4, f5, f3, red, green, blue, alpha);
@@ -409,6 +410,52 @@ public final class RenderUtils {
 			addQuad(buffer, matrix, f, f2, f3, f, f2, f6, f, f5, f6, f, f5, f3, red, green, blue, alpha);
 			addQuad(buffer, matrix, f4, f2, f3, f4, f5, f3, f4, f5, f6, f4, f2, f6, red, green, blue, alpha);
 		});
+		GL11.glDepthFunc(GL11.GL_LEQUAL);
+	}
+
+	public static void renderBoxOutline(MatrixStack matrices, Box box, Color color, float lineWidth) {
+		Matrix4f matrix = matrices.peek().getPositionMatrix();
+		float red = color.getRed() / 255F;
+		float green = color.getGreen() / 255F;
+		float blue = color.getBlue() / 255F;
+		float alpha = color.getAlpha() / 255F;
+
+		if (ClickGUI.antiAliasing.getValue()) {
+			GL11.glEnable(GL13.GL_MULTISAMPLE);
+			GL11.glEnable(GL11.GL_LINE_SMOOTH);
+			GL11.glHint(GL11.GL_LINE_SMOOTH_HINT, GL11.GL_NICEST);
+		}
+
+		GL11.glDepthFunc(GL11.GL_ALWAYS);
+		drawLayer(RenderLayers.lines(), buffer -> {
+			float minX = (float) box.minX;
+			float minY = (float) box.minY;
+			float minZ = (float) box.minZ;
+			float maxX = (float) box.maxX;
+			float maxY = (float) box.maxY;
+			float maxZ = (float) box.maxZ;
+
+			emitLine(buffer, matrix, minX, minY, minZ, maxX, minY, minZ, red, green, blue, alpha, lineWidth);
+			emitLine(buffer, matrix, maxX, minY, minZ, maxX, minY, maxZ, red, green, blue, alpha, lineWidth);
+			emitLine(buffer, matrix, maxX, minY, maxZ, minX, minY, maxZ, red, green, blue, alpha, lineWidth);
+			emitLine(buffer, matrix, minX, minY, maxZ, minX, minY, minZ, red, green, blue, alpha, lineWidth);
+
+			emitLine(buffer, matrix, minX, maxY, minZ, maxX, maxY, minZ, red, green, blue, alpha, lineWidth);
+			emitLine(buffer, matrix, maxX, maxY, minZ, maxX, maxY, maxZ, red, green, blue, alpha, lineWidth);
+			emitLine(buffer, matrix, maxX, maxY, maxZ, minX, maxY, maxZ, red, green, blue, alpha, lineWidth);
+			emitLine(buffer, matrix, minX, maxY, maxZ, minX, maxY, minZ, red, green, blue, alpha, lineWidth);
+
+			emitLine(buffer, matrix, minX, minY, minZ, minX, maxY, minZ, red, green, blue, alpha, lineWidth);
+			emitLine(buffer, matrix, maxX, minY, minZ, maxX, maxY, minZ, red, green, blue, alpha, lineWidth);
+			emitLine(buffer, matrix, maxX, minY, maxZ, maxX, maxY, maxZ, red, green, blue, alpha, lineWidth);
+			emitLine(buffer, matrix, minX, minY, maxZ, minX, maxY, maxZ, red, green, blue, alpha, lineWidth);
+		});
+		GL11.glDepthFunc(GL11.GL_LEQUAL);
+
+		if (ClickGUI.antiAliasing.getValue()) {
+			GL11.glDisable(GL11.GL_LINE_SMOOTH);
+			GL11.glDisable(GL13.GL_MULTISAMPLE);
+		}
 	}
 
 	public static void renderLine(MatrixStack matrices, Color color, Vec3d start, Vec3d end) {
@@ -449,4 +496,5 @@ public final class RenderUtils {
 		}
 		matrices.pop();
 	}
+
 }
