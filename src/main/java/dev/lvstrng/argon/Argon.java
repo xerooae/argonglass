@@ -2,6 +2,8 @@ package dev.lvstrng.argon;
 
 import dev.lvstrng.argon.event.EventManager;
 import dev.lvstrng.argon.gui.ClickGui;
+import dev.lvstrng.argon.integration.ArgonBrowserScreen;
+import dev.lvstrng.argon.integration.ArgonInteropServer;
 import dev.lvstrng.argon.managers.FriendManager;
 import dev.lvstrng.argon.module.ModuleManager;
 import dev.lvstrng.argon.managers.ProfileManager;
@@ -22,10 +24,14 @@ public final class Argon {
 	public FriendManager friendManager;
 	public static MinecraftClient mc;
 	public String version = " b1.3";
-	public static boolean BETA; //this was for beta kids but ablue never made it a reality, and you basically paid extra 10 bucks for nothing while ablue spent it all on war thunder to buy pre-historic tanks and estrogen 🤡🤡🤡
+	public static boolean BETA;
 	public static Argon INSTANCE;
 	public boolean guiInitialized;
+	// Legacy native GUI — kept for fallback
 	public ClickGui clickGui;
+	// LiquidBounce-style browser GUI
+	public ArgonInteropServer interopServer;
+	public boolean useBrowserGui = true; // set false to revert to native GUI
 	public Screen previousScreen = null;
 	public long lastModified;
 	public File argonJar;
@@ -44,6 +50,19 @@ public final class Argon {
 
 		this.guiInitialized = false;
 		mc = MinecraftClient.getInstance();
+
+		// Phase 2: Start the interop HTTP server for LiquidBounce Svelte GUI
+		try {
+			this.interopServer = ArgonInteropServer.getInstance();
+			this.interopServer.start();
+			System.out.println("[Argon] Interop server running at " + interopServer.getUrl());
+		} catch (Exception e) {
+			System.err.println("[Argon] Failed to start interop server, falling back to native GUI: " + e.getMessage());
+			this.useBrowserGui = false;
+		}
+
+		// Phase 3: Start MCEF background initialization and binary download
+		dev.lvstrng.argon.integration.MCEFInitializer.initialize();
 	}
 
 	public ProfileManager getProfileManager() {
@@ -64,6 +83,19 @@ public final class Argon {
 
 	public ClickGui getClickGui() {
 		return clickGui;
+	}
+
+	/**
+	 * Phase 3: Opens the LiquidBounce Svelte GUI inside an MCEF browser window.
+	 * Falls back to the native ClickGui if MCEF/interop server failed to start.
+	 */
+	public void openGui() {
+		if (useBrowserGui && interopServer != null) {
+			String guiUrl = interopServer.getUrl() + "/resource/liquidbounce/index.html";
+			mc.execute(() -> mc.setScreen(new ArgonBrowserScreen(guiUrl)));
+		} else {
+			mc.execute(() -> mc.setScreen(clickGui));
+		}
 	}
 
 	public void resetModifiedDate() {

@@ -55,29 +55,28 @@ public final class ClickGUI extends Module implements PacketReceiveListener {
 		eventManager.add(PacketReceiveListener.class, this);
 		Argon.INSTANCE.previousScreen = mc.currentScreen;
 
-		if (Argon.INSTANCE.clickGui != null) {
-			mc.setScreenAndRender(Argon.INSTANCE.clickGui);
-		} else if (mc.currentScreen instanceof InventoryScreen) {
-			Argon.INSTANCE.guiInitialized = true;
-		}
+		// Phase 3: Use LiquidBounce browser GUI if available, else fall back to native
+		Argon.INSTANCE.openGui();
 
-		super.onEnable();
+		// ClickGUI is an action module — immediately reset the enabled flag so
+		// the keybind can fire again next press, without triggering onDisable()
+		// (which would close the screen we just opened).
+		this.setEnabledStatus(false);
 	}
 
 	@Override
 	public void onDisable() {
 		eventManager.remove(PacketReceiveListener.class, this);
 
-		if (mc.currentScreen instanceof ClickGui) {
-			Argon.INSTANCE.clickGui.close();
-			mc.setScreenAndRender(Argon.INSTANCE.previousScreen);
-			Argon.INSTANCE.clickGui.onGuiClose();
-		} else if (mc.currentScreen instanceof InventoryScreen) {
+		if (mc.currentScreen instanceof dev.lvstrng.argon.integration.ArgonBrowserScreen || mc.currentScreen instanceof ClickGui) {
+			mc.execute(() -> mc.setScreen(Argon.INSTANCE.previousScreen));
+		} else if (mc.currentScreen instanceof net.minecraft.client.gui.screen.ingame.InventoryScreen) {
 			Argon.INSTANCE.guiInitialized = false;
 		}
 
 		super.onDisable();
 	}
+
 
 
 	@Override
