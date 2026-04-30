@@ -26,7 +26,7 @@ public final class AutoXP extends Module implements TickListener, ItemUseListene
 		super(EncryptedString.of("Auto XP"),
 				EncryptedString.of("Automatically throws XP bottles for you"),
 				-1,
-				Category.MISC);
+				Category.PLAYER);
 		addSettings(delay, chance, clickSimulation);
 	}
 

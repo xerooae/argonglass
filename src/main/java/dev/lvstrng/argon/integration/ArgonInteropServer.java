@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonElement;
 import dev.lvstrng.argon.Argon;
 import dev.lvstrng.argon.module.Category;
 import dev.lvstrng.argon.module.Module;
@@ -127,10 +128,49 @@ public class ArgonInteropServer {
 
             // Read headers
             int contentLength = 0;
+            boolean isWebSocket = false;
+            String wsKey = "";
+            String wsProtocol = "";
             String line;
             while ((line = reader.readLine()) != null && !line.isEmpty()) {
-                if (line.toLowerCase().startsWith("content-length:"))
+                String lowerLine = line.toLowerCase();
+                if (lowerLine.startsWith("content-length:"))
                     contentLength = Integer.parseInt(line.split(":")[1].trim());
+                if (lowerLine.startsWith("upgrade: websocket"))
+                    isWebSocket = true;
+                if (lowerLine.startsWith("sec-websocket-key:"))
+                    wsKey = line.split(":")[1].trim();
+                if (lowerLine.startsWith("sec-websocket-protocol:"))
+                    wsProtocol = line.split(":")[1].trim();
+            }
+
+            if (isWebSocket && !wsKey.isEmpty()) {
+                System.out.println("[ArgonInterop] Upgrading to dummy WebSocket...");
+                java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-1");
+                byte[] hashed = md.digest((wsKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").getBytes(StandardCharsets.UTF_8));
+                String accept = java.util.Base64.getEncoder().encodeToString(hashed);
+                
+                String header = "HTTP/1.1 101 Switching Protocols\r\n" +
+                        "Upgrade: websocket\r\n" +
+                        "Connection: Upgrade\r\n" +
+                        "Sec-WebSocket-Accept: " + accept + "\r\n";
+                
+                if (!wsProtocol.isEmpty()) {
+                    header += "Sec-WebSocket-Protocol: " + wsProtocol + "\r\n";
+                }
+                header += "\r\n";
+                
+                out.write(header.getBytes(StandardCharsets.UTF_8));
+                out.flush();
+                
+                // Keep the socket alive so the frontend thinks it's connected
+                try {
+                    while (in.read() != -1) {
+                        // ignore incoming websocket frames
+                    }
+                } catch (Exception ignored) {}
+                System.out.println("[ArgonInterop] Dummy WebSocket closed.");
+                return;
             }
 
             // Read body
@@ -151,6 +191,14 @@ public class ArgonInteropServer {
                 return;
             }
 
+            // Handle root redirect for safety
+            if (path.equals("/") || path.isEmpty()) {
+                String header = "HTTP/1.1 302 Found\r\n" +
+                        "Location: /resource/liquidbounce/index.html\r\n\r\n";
+                out.write(header.getBytes(StandardCharsets.UTF_8));
+                return;
+            }
+
             // Handle OPTIONS pre-flight
             if ("OPTIONS".equals(method)) {
                 String header = "HTTP/1.1 204 No Content\r\n" +
@@ -163,6 +211,11 @@ public class ArgonInteropServer {
 
             // Route to JSON API handlers
             String response = route(method, path, query, body);
+            if (response != null && response.length() > 500) {
+                 System.out.println("[ArgonInterop] Response: " + response.substring(0, 100) + "... (total " + response.length() + ")");
+            } else {
+                 System.out.println("[ArgonInterop] Response: " + response);
+            }
 
             // Write HTTP response
             byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
@@ -190,6 +243,8 @@ public class ArgonInteropServer {
         if ("OPTIONS".equals(method)) return "{}";
 
         // ── GET /api/v1/client/info
+        System.out.println("[ArgonInterop] Request: " + method + " " + path + (query != null ? "?" + query : ""));
+
         if ("GET".equals(method) && path.equals("/api/v1/client/info")) {
             return getClientInfo();
         }
@@ -206,18 +261,21 @@ public class ArgonInteropServer {
 
         // ── POST/PUT/DELETE /api/v1/client/modules/toggle
         if (path.equals("/api/v1/client/modules/toggle")) {
+            System.out.println("[ArgonInterop] Toggle body: " + body);
             return toggleModule(body, method);
         }
 
         // ── GET /api/v1/client/modules/settings?name=X
         if ("GET".equals(method) && path.equals("/api/v1/client/modules/settings")) {
             String name = getQueryParam(query, "name");
+            System.out.println("[ArgonInterop] Get Settings for: " + name);
             return getModuleSettings(name);
         }
 
         // ── PUT /api/v1/client/modules/settings?name=X
         if ("PUT".equals(method) && path.equals("/api/v1/client/modules/settings")) {
             String name = getQueryParam(query, "name");
+            System.out.println("[ArgonInterop] Put Settings for: " + name + " body: " + body);
             return putModuleSettings(name, body);
         }
 
@@ -227,7 +285,12 @@ public class ArgonInteropServer {
             return getSingleModule(name);
         }
 
-        return errorJson("Unknown endpoint: " + path);
+        // ── GET /api/v1/client/localStorage/all
+        if ("GET".equals(method) && path.equals("/api/v1/client/localStorage/all")) {
+            return "{}";
+        }
+
+        return "{}";
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -254,7 +317,9 @@ public class ArgonInteropServer {
             obj.addProperty("height", mc.getWindow().getHeight());
             obj.addProperty("scaledWidth", mc.getWindow().getScaledWidth());
             obj.addProperty("scaledHeight", mc.getWindow().getScaledHeight());
-            obj.addProperty("scaleFactor", mc.getWindow().getScaleFactor());
+            // Hardcode scaleFactor to 2.0 to prevent Svelte from double-zooming,
+            // as we are already rendering the browser at the scaled dimensions.
+            obj.addProperty("scaleFactor", 2.0);
         }
         return GSON.toJson(obj);
     }
@@ -263,7 +328,9 @@ public class ArgonInteropServer {
     private String getModules() {
         JsonArray arr = new JsonArray();
         for (Module m : Argon.INSTANCE.getModuleManager().getModules()) {
-            arr.add(moduleToJson(m));
+            JsonObject json = moduleToJson(m);
+            System.out.println("[ArgonInterop] Sending module: " + m.getName().toString() + " (" + m.getCategory().name.toString() + ") enabled=" + m.isEnabled());
+            arr.add(json);
         }
         return GSON.toJson(arr);
     }
@@ -275,28 +342,43 @@ public class ArgonInteropServer {
                 return GSON.toJson(moduleToJson(m));
             }
         }
-        return errorJson("Module not found: " + name);
+        return "{}";
     }
 
-    /** POST/PUT /api/v1/client/modules/toggle { "name": "Sprint" } */
     private String toggleModule(String body, String method) {
         try {
             JsonObject req = GSON.fromJson(body, JsonObject.class);
             String name = req.get("name").getAsString();
-            for (Module m : Argon.INSTANCE.getModuleManager().getModules()) {
-                if (m.getName().toString().equalsIgnoreCase(name)) {
-                    boolean shouldEnable = "PUT".equals(method) || ("POST".equals(method) && !m.isEnabled());
-                    if ("DELETE".equals(method)) shouldEnable = false;
-                    // Run on Minecraft main thread to be safe
-                    boolean finalShouldEnable = shouldEnable;
-                    MinecraftClient.getInstance().execute(() -> m.setEnabled(finalShouldEnable));
-                    return "{}";
-                }
+            boolean desired = req.get("enabled").getAsBoolean();
+            
+            Module m = findModule(name);
+            if (m != null) {
+                // Run on Minecraft main thread to be safe
+                MinecraftClient.getInstance().execute(() -> {
+                    m.setEnabled(desired);
+                    System.out.println("[ArgonInterop] Module " + m.getName().toString() + " is now " + m.isEnabled());
+                });
+                
+                // Return module in LB schema immediately with the desired state
+                JsonObject obj = new JsonObject();
+                obj.addProperty("name", m.getName().toString());
+                obj.addProperty("enabled", desired);
+                obj.addProperty("state", desired);
+                obj.addProperty("active", desired);
+                obj.addProperty("category", categoryTag(m.getCategory()));
+                obj.addProperty("description", m.getDescription().toString());
+                
+                JsonObject kb = new JsonObject();
+                kb.addProperty("boundKey", "key.keyboard.unknown");
+                kb.add("modifiers", new JsonArray());
+                obj.add("keyBind", kb);
+                
+                return GSON.toJson(obj);
             }
-            return errorJson("Module not found: " + name);
         } catch (Exception e) {
-            return errorJson("Bad request: " + e.getMessage());
+            e.printStackTrace();
         }
+        return "{}";
     }
 
     /**
@@ -305,7 +387,7 @@ public class ArgonInteropServer {
      */
     private String getModuleSettings(String name) {
         Module module = findModule(name);
-        if (module == null) return errorJson("Module not found: " + name);
+        if (module == null) return "[]";
 
         JsonArray arr = new JsonArray();
         for (Setting<?> s : module.getSettings()) {
@@ -321,12 +403,24 @@ public class ArgonInteropServer {
      */
     private String putModuleSettings(String name, String body) {
         Module module = findModule(name);
-        if (module == null) return errorJson("Module not found: " + name);
+        if (module == null) return "{}";
 
         try {
-            JsonArray updates = GSON.fromJson(body, JsonArray.class);
-            for (var el : updates) {
-                JsonObject update = el.getAsJsonObject();
+            JsonElement json = GSON.fromJson(body, JsonElement.class);
+            if (json.isJsonArray()) {
+                JsonArray updates = json.getAsJsonArray();
+                for (var el : updates) {
+                    JsonObject update = el.getAsJsonObject();
+                    String settingName = update.get("name").getAsString();
+                    for (Setting<?> s : module.getSettings()) {
+                        if (s.getName().toString().equalsIgnoreCase(settingName)) {
+                            applySettingValue(s, update.get("value"));
+                            break;
+                        }
+                    }
+                }
+            } else if (json.isJsonObject()) {
+                JsonObject update = json.getAsJsonObject();
                 String settingName = update.get("name").getAsString();
                 for (Setting<?> s : module.getSettings()) {
                     if (s.getName().toString().equalsIgnoreCase(settingName)) {
@@ -336,7 +430,8 @@ public class ArgonInteropServer {
                 }
             }
         } catch (Exception e) {
-            return errorJson("Failed to apply settings: " + e.getMessage());
+            e.printStackTrace();
+            return "{}";
         }
         return "{}";
     }
@@ -351,12 +446,16 @@ public class ArgonInteropServer {
         obj.addProperty("name", m.getName().toString());
         obj.addProperty("category", categoryTag(m.getCategory()));
         obj.addProperty("enabled", m.isEnabled());
+        obj.addProperty("state", m.isEnabled());
+        obj.addProperty("active", m.isEnabled());
         obj.addProperty("description", m.getDescription() != null ? m.getDescription().toString() : "");
-        obj.addProperty("tag", (String) null);
+        obj.addProperty("tag", "");
         obj.addProperty("hidden", false);
-        // keyBind - LiquidBounce sends a keybind object
+        obj.add("settings", new JsonArray());
+        
         JsonObject keyBind = new JsonObject();
-        keyBind.addProperty("key", m.getKey());
+        keyBind.addProperty("boundKey", "key.keyboard.unknown");
+        keyBind.add("modifiers", new JsonArray());
         obj.add("keyBind", keyBind);
         return obj;
     }
@@ -368,27 +467,27 @@ public class ArgonInteropServer {
         if (s.getDescription() != null) obj.addProperty("description", s.getDescription().toString());
 
         if (s instanceof BooleanSetting bs) {
-            obj.addProperty("valueType", "BOOLEAN");
+            obj.addProperty("type", "bool");
             obj.addProperty("value", bs.getValue());
         } else if (s instanceof NumberSetting ns) {
-            obj.addProperty("valueType", "FLOAT");
+            obj.addProperty("type", "number");
             obj.addProperty("value", ns.getValue());
-            obj.addProperty("range", "[" + ns.getMin() + "," + ns.getMax() + "]");
-            obj.addProperty("suffix", "");
+            obj.addProperty("min", ns.getMin());
+            obj.addProperty("max", ns.getMax());
+            obj.addProperty("step", (ns.getValue() == (int)ns.getValue()) ? 1 : 0.1);
         } else if (s instanceof ModeSetting<?> ms) {
-            obj.addProperty("valueType", "CHOICE");
+            obj.addProperty("type", "mode");
             obj.addProperty("value", ms.getMode().toString());
             JsonArray choices = new JsonArray();
-            // Enum values via reflection-safe approach
             var mode = ms.getMode();
             if (mode != null) {
                 for (var constant : mode.getClass().getEnumConstants()) {
                     choices.add(constant.toString());
                 }
             }
-            obj.add("choices", choices);
+            obj.add("values", choices);
         } else if (s instanceof KeybindSetting ks) {
-            obj.addProperty("valueType", "KEY");
+            obj.addProperty("type", "key");
             obj.addProperty("value", ks.getKey());
         } else {
             return null; // skip unknown types
@@ -429,8 +528,12 @@ public class ArgonInteropServer {
 
     private Module findModule(String name) {
         if (name == null) return null;
-        for (Module m : Argon.INSTANCE.getModuleManager().getModules())
-            if (m.getName().toString().equalsIgnoreCase(name)) return m;
+        String search = name.trim();
+        for (Module m : Argon.INSTANCE.getModuleManager().getModules()) {
+            String mName = m.getName().toString().trim();
+            if (mName.equalsIgnoreCase(search)) return m;
+        }
+        System.out.println("[ArgonInterop] Failed to find module: '" + name + "'");
         return null;
     }
 
@@ -445,10 +548,14 @@ public class ArgonInteropServer {
 
     private String categoryTag(Category cat) {
         return switch (cat) {
-            case COMBAT -> "Combat";
-            case MISC   -> "Misc";
-            case RENDER -> "Render";
-            case CLIENT -> "Client";
+            case COMBAT   -> "Combat";
+            case MOVEMENT -> "Movement";
+            case PLAYER   -> "Player";
+            case RENDER   -> "Render";
+            case WORLD    -> "World";
+            case EXPLOIT  -> "Exploit";
+            case MISC     -> "Misc";
+            case CLIENT   -> "Client";
         };
     }
 

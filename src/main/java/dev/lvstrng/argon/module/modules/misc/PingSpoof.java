@@ -17,7 +17,7 @@ public final class PingSpoof extends Module implements PacketReceiveListener {
 	private int delay;
 	public PingSpoof() {
 		super(EncryptedString.of("Ping Spoof"),
-				EncryptedString.of("Holds back packets making the server think your internet connection is bad."), -1, Category.MISC);
+				EncryptedString.of("Holds back packets making the server think your internet connection is bad."), -1, Category.EXPLOIT);
 		addSettings(ping);
 	}
 

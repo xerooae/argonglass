@@ -11,7 +11,7 @@ public final class NoJumpDelay extends Module implements TickListener {
 		super(EncryptedString.of("No Jump Delay"),
 				EncryptedString.of("Lets you jump faster, removing the delay"),
 				-1,
-				Category.MISC);
+				Category.MOVEMENT);
 	}
 
 	@Override

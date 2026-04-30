@@ -1,32 +1,62 @@
-# ‼️‼️‼️**PLEASE READ THIS AND THE LICENSE** ‼️‼️‼️
+# Argon x LiquidBounce GUI Integration Guide
 
-***PLEASE READ THE LICENSE BEFORE DOING ANYTHING WITH THE SOURCE CODE OF THE CLIENT.***.
+This document is written for an AI coding assistant to provide a comprehensive roadmap for transferring the **LiquidBounce** GUI onto the **Argon** client.
 
-I am writing this because I see a lot of people copying my work and selling it without giving me credit or informing me/asking me for permission. Well, you are **NOT** allowed to rename this client. You are **NOT** allowed to refer to this client or anything you copy from it as if it's owned by you.
+**Goal:** Use the LiquidBounce source to completely replace the visual GUI of Argon so that it looks and behaves *exactly* the same as LiquidBounce, while keeping Argon's underlying modules and settings intact. You will *not* be building a theme; you are ripping out Argon's native GUI and implanting LiquidBounce's web-based JCEF (Chromium) GUI system.
 
-***PLEASE READ THE LICENSE BEFORE DOING ANYTHING WITH THE SOURCE CODE OF THE CLIENT.***.
+---
 
-You are allowed to modify the code of this client and publish your version of this client **either as open-source or closed-source, but not sold.** Please respect me, my project and yourself.
+## Architectural Breakdown
 
-# Argon Minecraft Ghost Client
+### 1. Argon's Backend (Keep Intact)
+Argon relies on a standard immediate-mode module/setting architecture:
+- **Modules**: Inherit from `dev.lvstrng.argon.module.Module`. They have a Name, Description, and `Category`.
+- **Settings**: Defined in `dev.lvstrng.argon.module.setting.*`. Core types include `BooleanSetting`, `NumberSetting`, `KeybindSetting`, and `ModeSetting`.
+- **State**: Modules have a toggled state and settings have a `.getValue()` and `.setValue()` API.
 
-## Why?
+### 2. Argon's Frontend (To Be Replaced)
+Argon currently uses a native Java/OpenGL immediate-mode rendering pipeline for its GUI.
+- **Entrypoints**: `dev.lvstrng.argon.gui.ClickGui` and `dev.lvstrng.argon.gui.Window`.
+- **Rendering**: Done natively via Minecraft's `DrawContext`.
+- **Action**: This entire `dev.lvstrng.argon.gui` package will be rendered obsolete and replaced by the LiquidBounce CEF wrapper.
 
-Originally a paid client, but since the new owner dumped me from the dev team of MY OWN CLIENT (yes, the client I STARTED and made about 85% of the client (but only got 30% of all the money made what the scam)) and demoted me, I decided to release the source code. I will try to update this as much as possible. I have updated the client to 1.21 but the damage utils are broken because mojang and fabric decide to change irrelevant stuff every update. The client cost 15 pounds for normal and 25 for beta, which ablue never ever finished and it turns out you just paid 10 bucks for the same shit. Ablue also ignores my DMs. When she does it's always the nword, insulting me or just a question mark. Ablue has also deleted a lot of old messages from my DMs and from other's too, you maybe might notice if you go through her DMs.
+### 3. LiquidBounce's Frontend (The Target)
+LiquidBounce (NextGen) uses a completely different paradigm for its GUI: **Web Technologies**.
+- **The UI**: The GUI is a fully standalone **Svelte** web application located in `LiquidBounce-e77a6699123fad2e2d50748c0c7f764932bb0b13/src-theme`.
+- **The Wrapper**: The Svelte app is rendered inside Minecraft using Chromium Embedded Framework (CEF/JCEF).
+- **The Screen**: The integration is handled via `net.ccbluex.liquidbounce.integration.screen.ScreenManager` and `CustomSharedMinecraftScreen`.
 
-This version of the client has auth removed COMPLETELY, so don't worry, the client won't crash on launch because of ablue's scary code. This version of the client also does NOT hide strings from memory, since ablue never really gave me full access over my own client (that being: giving me the string transformer so i can hide strings in memory). The code for hiding strings is in `EncryptedString`. If you do create one and want to support the project, please DM me on discord (I will not be buying the transformer): ```lvstrng```
+### 4. LiquidBounce's Interop (The Bridge)
+Because the UI is a web app and the cheat logic is in Java/Kotlin, LiquidBounce uses an internal server to communicate.
+- **Location**: `net.ccbluex.liquidbounce.integration.interop.ClientInteropServer`
+- **Functionality**: It hosts a local REST/WebSocket API that the Svelte frontend queries to get the list of modules, toggle states, and settings. 
 
-NOTE: Some of the stuff here is pasted by ablue lmaooo (Not damage utils, I was lazy to make damage utils for 1.21 so i just pasted from meteor client)
+---
 
-## Why I updated this
+## Step-by-Step Implementation Plan
 
-Even though I did not want this to be leaked, It got leaked either way, I don't care anymore, It looked like some of you guys needed an updated version to 1.21.11, so I did It!, just a note, I have not tried any of the modules out after the update, If you find any issues, please open an issue or a PR!
+To successfully merge LiquidBounce's GUI onto Argon, follow these phases:
 
-# IMPORTANT!!!!!! READ THE LICENSE, READ THE LICENSE, READ THE LICENSE.
+### Phase 1: Engine & Dependency Setup
+You must bring JCEF (Chromium Embedded Framework) into Argon's build environment.
+1. Extract LiquidBounce's Gradle dependencies relating to CEF/JCEF.
+2. Port the `net.ccbluex.liquidbounce.integration.screen` package over to Argon. You will need to convert these Kotlin classes to Java or enable Kotlin support in Argon's `build.gradle`.
 
-## How to build
+### Phase 2: Interop Server & Bridge Adaptation
+The Svelte frontend expects an API to provide module/setting data. You need to provide that API using Argon's backend.
+1. Port LiquidBounce's `ClientInteropServer` and its `protocol` package into Argon.
+2. **Crucial Step**: Modify the REST endpoints in the Interop server. Instead of fetching LiquidBounce modules (`ClientModule`), rewrite the endpoints to iterate over Argon's `ModuleManager` and serialize Argon's `dev.lvstrng.argon.module.setting.*` instances into the JSON format expected by the Svelte frontend.
+3. Map Svelte UI setting changes (e.g., a POST request to update a slider) to Argon's `NumberSetting.setValue()`.
 
-- Launch the project in IntelliJ
-- Make a new configuration and make it do `build`
-- Find jar in project's `build/libs` (name should be argon-b1.1.jar unless you change it) 
-![image](https://github.com/user-attachments/assets/b2e8853e-2916-4219-9443-85ff7549d418)
+### Phase 3: GUI Replacement
+1. Delete or deprecate Argon's `ClickGui.java`.
+2. Hook Argon's "Right Shift" (or generic ClickGUI keybind) to open the LiquidBounce `CustomSharedMinecraftScreen` wrapper instead.
+3. Ensure the CEF browser points to the internal web server hosted by `ClientInteropServer`.
+
+### Phase 4: Build System & Asset Integration
+1. The Svelte app (`src-theme/`) must be compiled (`npm run build`).
+2. Integrate the compiled Svelte output (`dist/`) into Argon's `src/main/resources/assets/argon/theme/` (or similar).
+3. Ensure Argon's embedded server correctly serves these static HTML/JS/CSS files to the CEF browser instance.
+
+## Summary for the AI
+Do not attempt to recreate LiquidBounce's visuals natively using `DrawContext`. The exact LiquidBounce GUI relies on HTML/CSS/JS. Your objective is to embed a Chromium window into Argon, host the LiquidBounce Svelte app locally, and rewrite the Java-to-JS bridge to feed Argon's modules and settings into LiquidBounce's API schema.

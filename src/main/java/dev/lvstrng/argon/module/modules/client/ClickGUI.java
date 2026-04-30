@@ -58,10 +58,8 @@ public final class ClickGUI extends Module implements PacketReceiveListener {
 		// Phase 3: Use LiquidBounce browser GUI if available, else fall back to native
 		Argon.INSTANCE.openGui();
 
-		// ClickGUI is an action module — immediately reset the enabled flag so
-		// the keybind can fire again next press, without triggering onDisable()
-		// (which would close the screen we just opened).
-		this.setEnabledStatus(false);
+		// ClickGUI is an action module — it will stay enabled while the screen is open.
+		// Re-pressing the keybind will trigger onDisable(), which closes the screen.
 	}
 
 	@Override

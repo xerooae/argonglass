@@ -90,6 +90,7 @@ public final class Argon {
 	 * Falls back to the native ClickGui if MCEF/interop server failed to start.
 	 */
 	public void openGui() {
+		if (mc.currentScreen instanceof ArgonBrowserScreen) return;
 		if (useBrowserGui && interopServer != null) {
 			String guiUrl = interopServer.getUrl() + "/resource/liquidbounce/index.html";
 			mc.execute(() -> mc.setScreen(new ArgonBrowserScreen(guiUrl)));

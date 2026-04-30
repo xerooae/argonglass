@@ -4,8 +4,12 @@ import dev.lvstrng.argon.utils.EncryptedString;
 
 public enum Category {
 	COMBAT(EncryptedString.of("Combat")),
-	MISC(EncryptedString.of("Misc")),
+	MOVEMENT(EncryptedString.of("Movement")),
+	PLAYER(EncryptedString.of("Player")),
 	RENDER(EncryptedString.of("Render")),
+	WORLD(EncryptedString.of("World")),
+	EXPLOIT(EncryptedString.of("Exploit")),
+	MISC(EncryptedString.of("Misc")),
 	CLIENT(EncryptedString.of("Client"));
 	public final CharSequence name;
 

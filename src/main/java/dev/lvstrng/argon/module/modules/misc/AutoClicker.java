@@ -39,7 +39,7 @@ public final class AutoClicker extends Module implements TickListener {
 		super(EncryptedString.of("Auto Clicker"),
 				EncryptedString.of("Automatically clicks for you"),
 				-1,
-				Category.MISC);
+				Category.COMBAT);
 
 		addSettings(onlyWeapon, onClick, delay, chance, mode);
 	}

@@ -7,7 +7,7 @@ import dev.lvstrng.argon.utils.EncryptedString;
 
 public final class Sprint extends Module implements TickListener {
     public Sprint() {
-        super(EncryptedString.of("Sprint"), EncryptedString.of("Keeps you sprinting at all times"), -1, Category.MISC);
+        super(EncryptedString.of("Sprint"), EncryptedString.of("Keeps you sprinting at all times"), -1, Category.MOVEMENT);
     }
 
     @Override

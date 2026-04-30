@@ -37,7 +37,7 @@ public final class FakeLag extends Module implements PlayerTickListener, PacketR
 		super(EncryptedString.of("Fake Lag"),
 				EncryptedString.of("Makes it impossible to aim at you by creating a lagging effect"),
 				-1,
-				Category.MISC);
+				Category.EXPLOIT);
 		addSettings(lagDelay, cancelOnElytra);
 	}
 

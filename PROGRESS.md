@@ -46,11 +46,33 @@ Using the wrong values caused the Chromium viewport to be scaled incorrectly.
 ### Fix 4 — MCEF Message Loop Not Pumped
 **File:** `ArgonBrowserScreen.java`
 
-MCEF requires `MCEF.INSTANCE.update()` to be called on the render thread each frame so the
-browser process can decode network responses, execute JS, and upload texture data.
-Without this call the texture ID is always 0 and the browser never makes visible progress.
+MCEF requires `MCEF.INSTANCE.update()` to be called on the render thread each frame so the browser process can decode network responses, execute JS, and upload texture data. Without this call, the texture ID is always 0 and the browser never makes visible progress.
 
 **Change:** `render()` now calls `MCEF.INSTANCE.update()` before reading `getTextureId()`.
+
+### Fix 5 — Mouse Button Swap (Expanding Modules Fix)
+**File:** `ArgonBrowserScreen.java`
+
+Minecraft's Right-Click (button 1) was being forwarded to Chromium as button 1, which Chromium interprets as **Middle-Click**. In the Svelte GUI, modules are expanded using Right-Click. This caused the GUI to appear non-interactive when trying to view settings.
+
+**Change:** Implemented button mapping in `forwardMousePress` (MC 1 -> CEF 2, MC 2 -> CEF 1).
+
+### Fix 6 — Category Mapping & Rework
+**Files:** `Category.java`, `ArgonInteropServer.java`, and various modules.
+
+The Argon client originally only had 4 categories (`COMBAT`, `MISC`, `RENDER`, `CLIENT`). The LiquidBounce GUI expects a wider range of categories to correctly populate its multi-panel layout and display the corresponding TabGUI icons.
+
+**Changes:**
+- Added `MOVEMENT`, `PLAYER`, `WORLD`, `EXPLOIT` to `Category.enum`.
+- Updated `ArgonInteropServer` to map these new categories to title-case strings for the frontend.
+- Redistributed Argon modules (e.g., `Sprint`, `Freecam`, `FakeLag`) into these new categories.
+
+### Fix 7 — Setting Interaction (URL Decoding)
+**File:** `ArgonInteropServer.java`
+
+When Svelte requests settings for a module with a space in its name (e.g., `Auto WTap`), it encodes the URL as `?name=Auto%20WTap`. The server was not decoding this, leading to failed module lookups.
+
+**Change:** Added `URLDecoder.decode` to all query parameter extraction points in the Interop server.
 
 ---
 

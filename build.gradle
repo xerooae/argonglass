@@ -11,7 +11,19 @@ base {
 }
 
 repositories {
-    // Add repositories to retrieve artifacts from in here.
+    // CCBlueX maven - needed for MCEF (Chromium Embedded Framework)
+    maven {
+        name = "CCBlueX Releases"
+        url = uri("https://maven.ccbluex.net/releases")
+    }
+    maven {
+        name = "CCBlueX Snapshots"
+        url = uri("https://maven.ccbluex.net/snapshots")
+    }
+    maven {
+        name = "Jitpack"
+        url = uri("https://jitpack.io")
+    }
 }
 
 configurations {
@@ -28,6 +40,13 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
     compileOnly files("lib/annotations-1.0.6.jar")
+
+    // MCEF - Chromium Embedded Framework for Minecraft (used for LiquidBounce GUI browser)
+    // MCEF - Chromium Embedded Framework for Minecraft (used for LiquidBounce GUI browser)
+    modImplementation("net.ccbluex:mcef:3.3.0-1.21.11")
+
+    // Gson for HTTP interop server JSON serialization
+    implementation("com.google.code.gson:gson:2.11.0")
 }
 
 processResources {
